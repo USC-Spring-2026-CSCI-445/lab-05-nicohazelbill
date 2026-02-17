@@ -36,6 +36,8 @@ class PIDController:
         # computer PID control action here
         ######### Your code starts here #########
         dt = t - self.t_prev
+        if dt <= 0.0:
+            return 0.0  # No control action if time has not advanced
         self.t_prev = t
 
         de = err - self.err_prev
@@ -102,7 +104,7 @@ class GoalPositionController:
         # define PID controllers for linear and angular velocities
         ######### Your code starts here #########
         self.linear_pid = PIDController(kP=1.0, kI=0.0, kD=0.1, kS=0.0, u_min=-0.5, u_max=0.5)
-        self.angular_pid = PIDController(kP=4.0, kI=0.0, kD=0.2, kS=0.0, u_min=-2.68, u_max=2.68)
+        self.angular_pid = PIDController(kP=4.0, kI=0.0, kD=0.2, kS=0.0, u_min=-2.86, u_max=2.86)
         ######### Your code ends here #########
 
     def odom_callback(self, msg):
@@ -147,11 +149,12 @@ class GoalPositionController:
 
             # Calculate control commands using linear and angular PID controllers and stop if close enough to goal
             ######### Your code starts here #########
-            if distance_error < 0.1:
+            if distance_error < 0.01:
                 ctrl_msg.linear.x = 0.0
                 ctrl_msg.angular.z = 0.0
             else:
-                ctrl_msg.linear.x = self.linear_pid.control(distance_error, rospy.get_time())
+                #ctrl_msg.linear.x = self.linear_pid.control(distance_error, rospy.get_time())
+                ctrl_msg.linear.x = 0.15
                 ctrl_msg.angular.z = self.angular_pid.control(angle_error, rospy.get_time())
             self.vel_pub.publish(ctrl_msg)
 
@@ -176,7 +179,9 @@ class GoalAngleController:
 
         # define PID controller angular velocity
         ######### Your code starts here #########
-        self.angular_pid = PDController(kP=4.0, kD=0.2, kS=0.0, u_min=-2.68, u_max=2.68)
+        self.angular_pid = PIDController(kP=4.0, kD=0.5, kI=0.2, kS=0.0, u_min=-2.86, u_max=2.86)
+        #self.angular_pid = PDController(kP=4.0, kD=0.5, kS=0.0, u_min=-2.86, u_max=2.86)
+
         ######### Your code ends here #########
 
     def odom_callback(self, msg):
