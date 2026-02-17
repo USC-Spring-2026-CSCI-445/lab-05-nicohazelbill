@@ -21,13 +21,29 @@ class PIDController:
         assert u_min < u_max, "u_min should be less than u_max"
         # Initialize PID variables here
         ######### Your code starts here #########
-
+        self.kP = kP
+        self.kI = kI
+        self.kD = kD
+        self.kS = kS
+        self.u_min = u_min
+        self.u_max = u_max
+        self.t_prev = rospy.get_time()
+        self.err_prev = 0.0
+        self.err_sum = 0.0
         ######### Your code ends here #########
 
     def control(self, err, t):
         # computer PID control action here
         ######### Your code starts here #########
+        dt = t - self.t_prev
+        self.t_prev = t
 
+        de = err - self.err_prev
+        self.err_prev = err
+        self.err_sum += err * dt
+
+        u = self.kP * err + self.kI * self.err_sum + self.kD * de / dt + self.kS * (1 if err > 0 else -1 if err < 0 else 0)
+        return max(self.u_min, min(self.u_max, u))
         ######### Your code ends here #########
 
 
@@ -42,6 +58,13 @@ class PDController:
         assert u_min < u_max, "u_min should be less than u_max"
         # Initialize PD variables here
         ######### Your code starts here #########
+        self.kP = kP
+        self.kD = kD
+        self.kS = kS
+        self.u_min = u_min
+        self.u_max = u_max
+        self.t_prev = rospy.get_time()
+        self.err_prev = 0.0
 
         ######### Your code ends here #########
 
@@ -49,7 +72,16 @@ class PDController:
         dt = t - self.t_prev
         # Compute PD control action here
         ######### Your code starts here #########
+        if dt <= 0.0:
+            return 0.0  # No control action if time has not advanced
+        self.t_prev = t
 
+        de = err - self.err_prev
+        self.err_prev = err 
+
+        u = self.kP * err + self.kD * de / dt + self.kS * (1 if err > 0 else -1 if err < 0 else 0)
+        
+        return max(self.u_min, min(self.u_max, u))
         ######### Your code ends here #########
 
 
@@ -69,7 +101,8 @@ class GoalPositionController:
 
         # define PID controllers for linear and angular velocities
         ######### Your code starts here #########
-
+        self.linear_pid = PIDController(kP=1.0, kI=0.0, kD=0.1, kS=0.0, u_min=-0.5, u_max=0.5)
+        self.angular_pid = PIDController(kP=4.0, kI=0.0, kD=0.2, kS=0.0, u_min=-2.68, u_max=2.68)
         ######### Your code ends here #########
 
     def odom_callback(self, msg):
@@ -86,7 +119,12 @@ class GoalPositionController:
 
         # Calculate error in position and orientation
         ######### Your code starts here #########
-
+        dx = self.goal_position["x"] - self.current_position["x"]
+        dy = self.goal_position["y"] - self.current_position["y"]
+        distance_error = math.sqrt(dx**2 + dy**2)
+        desired_angle = math.atan2(dy, dx)
+        angle_diff = desired_angle - self.current_position["theta"]
+        angle_error= math.atan2(math.sin(angle_diff), math.cos(angle_diff))
         ######### Your code ends here #########
 
         # Ensure angle error is within -pi to pi range
@@ -109,7 +147,13 @@ class GoalPositionController:
 
             # Calculate control commands using linear and angular PID controllers and stop if close enough to goal
             ######### Your code starts here #########
-
+            if distance_error < 0.1:
+                ctrl_msg.linear.x = 0.0
+                ctrl_msg.angular.z = 0.0
+            else:
+                ctrl_msg.linear.x = self.linear_pid.control(distance_error, rospy.get_time())
+                ctrl_msg.angular.z = self.angular_pid.control(angle_error, rospy.get_time())
+            self.vel_pub.publish(ctrl_msg)
 
             ######### Your code ends here #########
 
@@ -132,7 +176,7 @@ class GoalAngleController:
 
         # define PID controller angular velocity
         ######### Your code starts here #########
-
+        self.angular_pid = PDController(kP=4.0, kD=0.2, kS=0.0, u_min=-2.68, u_max=2.68)
         ######### Your code ends here #########
 
     def odom_callback(self, msg):
@@ -149,6 +193,7 @@ class GoalAngleController:
 
         # Calculate error in orientation
         ######### Your code starts here #########
+        angle_error = self.goal_angle - self.current_position["theta"]
 
         ######### Your code ends here #########
 
@@ -170,7 +215,11 @@ class GoalAngleController:
 
             # Calculate control commands using angular PID controller and stop if close enough to goal
             ######### Your code starts here #########
-
+            if abs(angle_error) < 0.1:
+                ctrl_msg.angular.z = 0.0
+            else:
+                ctrl_msg.angular.z = self.angular_pid.control(angle_error, rospy.get_time())
+            self.vel_pub.publish(ctrl_msg)
             ######### Your code ends here #########
 
             rate.sleep()
